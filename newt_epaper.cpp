@@ -325,53 +325,66 @@ void EPD_Init(void)
     // reset the TFT controller
     spi.pulse_reset();
 
-    spi.send_command(0x00);
-    spi.send_data(0x1F);
+    // Panel Setting: ~REG, KW/R, UD, SHL, SHD_N, RST_N
+    spi.send(0x00, { 0x1f } ); 
   
-    spi.send_command(0x04); //POWER ON
+    // Power On
+    spi.send(0x04); 
     sleep_ms(300);  
     spi.wait_ready();
-    spi.send_command(0X50);     //VCOM AND DATA INTERVAL SETTING
-    spi.send_data(0x21);
-    spi.send_data(0x07); 
+
+    // VCOM and data interval setting
+    spi.send(0x50, { 0x21, 0x07 } ); // BDV:2, DOX:1, CDI:7
 }
 
 //Deep sleep function
 void EPD_DeepSleep(void)
 {   
-    spi.send_command(0X50);  //VCOM AND DATA INTERVAL SETTING     
-    spi.send_data(0xf7); //WBmode:VBDF 17|D7 VBDW 97 VBDB 57    WBRmode:VBDF F7 VBDW 77 VBDB 37  VBDR B7  
+    // VCOM and data interval setting (??? documented differently in the datasheet)
+    spi.send(0x50, { 0xf7 } ); // WBmode:VBDF 17|D7 VBDW 97 VBDB 57    WBRmode:VBDF F7 VBDW 77 VBDB 37  VBDR B7  
 
-    spi.send_command(0X02);   //power off
-    spi.wait_ready();          //waiting for the electronic paper IC to release the idle signal
-    sleep_ms(100);   //!!!The delay here is necessary, 200uS at least!!!       
-    spi.send_command(0X07);   //deep sleep
-    spi.send_data(0xA5);
+    // Power off
+    spi.send(0x02);   
+    spi.wait_ready();   // waiting for the electronic paper IC to release the idle signal
+    sleep_ms(100);      // !!! The delay here is necessary, 200uS at least!!!       
+
+    // Deep sleep
+    spi.send(0x07, { 0xa5 } );
 }
 
 void EPD_Update(void)
 {   
-    //Refresh
-    spi.send_command(0x12);   //DISPLAY REFRESH   
-    spi.wait_ready();          //waiting for the electronic paper IC to release the idle signal
+    // Display refresh
+    spi.send(0x12);
+    spi.wait_ready(); // waiting for the electronic paper IC to release the idle signal
 }
 
 
-//Clear screen display
+// Clear screen display
 void EPD_WhiteScreen_White(void)
 {
     unsigned int i;
-    //Write Data
-    spi.send_command(0x10);      
+
+    // Write Old Data
+    spi.start();
+    spi.write(0x10);
+    spi.data_mode();
     for(i=0;i<EPD_ARRAY;i++)       
     {
-        spi.send_data(0xff);  
+        spi.write(0xff);  
     }
-    spi.send_command(0x13);      
+    spi.end();
+
+    // Write New Data
+    spi.start();
+    spi.write(0x13);
+    spi.data_mode();
     for(i=0;i<EPD_ARRAY;i++)       
     {
-        spi.send_data(0xff);  
+        spi.write(0xff);  
     }
+    spi.end();
+
     EPD_Update();   
 }
 
@@ -379,17 +392,26 @@ void EPD_WhiteScreen_White(void)
 void EPD_WhiteScreen_Black(void)
 {
     unsigned int i;
-    //Write Data
-    spi.send_command(0x10);      
+    // Write Old Data
+    spi.start();
+    spi.write(0x10);
+    spi.data_mode();
     for(i=0;i<EPD_ARRAY;i++)       
     {
-        spi.send_data(0xff);  
+        spi.write(0xff);  
     }
-    spi.send_command(0x13);      
+    spi.end();
+
+    // Write New Data
+    spi.start();
+    spi.write(0x13);
+    spi.data_mode();
     for(i=0;i<EPD_ARRAY;i++)       
     {
-        spi.send_data(0x00);  
+        spi.write(0x00);  
     }
+    spi.end();
+
     EPD_Update();  
 }
 
@@ -397,7 +419,7 @@ void EPD_WhiteScreen_Black(void)
 int main() {
     stdio_init_all();
     led_init();
-    spi.init();
+    spi.init(20 * 1000 * 1000); // The SSD1677 ssems to be rated at 20MHz, likely works up to 40MHz.
 
     EPD_Init(); //Full screen update initialization.
     //EPD_WhiteScreen_White(); //Clear screen function.

@@ -29,61 +29,23 @@ void SPI_3Pin::pin_config_in(uint pin, int value) {
 }
 
 // Initialize SPI and boot the display controller
-void SPI_3Pin::init() {
+void SPI_3Pin::init(uint clockrate) {
     // define the pins we use directly
     pin_config_out(kPinCs, 1);
     pin_config_out(kPinDc, 1);
     pin_config_out(kPinReset, 1);
-    pin_config_in(kPinBusy, 0);
+    pin_config_in(kPinBusy, 1); // busy is active low, so we pull it up
 
     // initialize the SPI port
-    spi_init(port, /*62.5 * */ 1000 * 1000);  // 62.5MHz, can probably be more if needed
+    spi_init(port, clockrate);
     spi_set_format( port,           // SPI instance
                     8,              // Number of bits per transfer
                     SPI_CPOL_1,     // Polarity (CPOL)
                     SPI_CPHA_1,     // Phase (CPHA)
                     SPI_MSB_FIRST);
     gpio_set_function(kPinSck, GPIO_FUNC_SPI);
-    gpio_set_function(kPinMosi, GPIO_FUNC_SPI);
-    gpio_set_function(kPinMiso, GPIO_FUNC_SPI);
-}
-
-
-
-
-void SPI_3Pin::wait_ready() { 
-    while(1)
-    {  //=0 BUSY
-        if (gpio_get(kPinBusy)==1) 
-            break;
-    }  
-}  
-
-void SPI_3Pin::send_command(uint8_t cmd) {
-    gpio_put(kPinDc, 0);
-    gpio_put(kPinCs, 0);
-    sleep_us(1);
-    spi_write_blocking(port, &cmd, 1);
-    sleep_us(1);
-    gpio_put(kPinCs, 1);
-}
-
-void SPI_3Pin::send_data(const uint8_t data) {
-    gpio_put(kPinDc, 1);
-    gpio_put(kPinCs, 0);
-    sleep_us(1);
-    spi_write_blocking(port, &data, 1);
-    sleep_us(1);
-    gpio_put(kPinCs, 1);
-}
-
-void SPI_3Pin::send_data(const uint8_t *data, size_t size) {
-    gpio_put(kPinDc, 1);
-    gpio_put(kPinCs, 0);
-    sleep_us(1);
-    spi_write_blocking(port, data, size);
-    sleep_us(1);
-    gpio_put(kPinCs, 1);
+    gpio_set_function(kPinTx, GPIO_FUNC_SPI);
+    gpio_set_function(kPinRx, GPIO_FUNC_SPI);
 }
 
 void SPI_3Pin::pulse_reset() {
@@ -92,6 +54,79 @@ void SPI_3Pin::pulse_reset() {
     gpio_put(kPinReset, 1);
     sleep_ms(100);
 }
+
+void SPI_3Pin::wait_ready() { 
+    while( gpio_get(kPinBusy)==0 ) { }
+}  
+
+void SPI_3Pin::start() {
+    wait_ready();
+    gpio_put(kPinDc, 0);
+    gpio_put(kPinCs, 0);
+}
+
+void SPI_3Pin::data_mode() {
+    gpio_put(kPinDc, 1);
+}
+
+void SPI_3Pin::write(const uint8_t *data, size_t size) {
+    spi_write_blocking(port, data, size);
+}
+
+void SPI_3Pin::start_read_mode() {
+    gpio_set_function(kPinTx, GPIO_FUNC_SIO);
+    gpio_set_dir(kPinTx, GPIO_IN); // High impedance
+    m_in_read_mode = true;
+}
+
+void SPI_3Pin::end_read_mode() {
+    gpio_set_dir(kPinTx, GPIO_OUT);
+    gpio_set_function(kPinTx, GPIO_FUNC_SPI);
+    m_in_read_mode = false;
+}
+
+void SPI_3Pin::read(uint8_t *data, size_t size) {
+    spi_read_blocking(port, 0, data, size);
+}
+
+void SPI_3Pin::end() {
+    gpio_put(kPinCs, 1);
+    gpio_put(kPinDc, 0);
+}
+
+void SPI_3Pin::send(uint8_t cmd) {
+    start();
+    write(&cmd, 1);
+    end();
+}
+
+void SPI_3Pin::send(uint8_t cmd, const std::vector<uint8_t> data) {
+    start();
+    write(&cmd, 1);
+    if (!data.empty()) {
+        data_mode();
+        write(data.data(), data.size());
+    }
+    end();
+}
+
+void SPI_3Pin::query(uint8_t cmd, const std::vector<uint8_t> data, std::vector<uint8_t> &response) {
+    start();
+    write(&cmd, 1);
+    if (!data.empty()) {
+        data_mode();
+        write(data.data(), data.size());
+    }
+    if (!response.empty()) {
+        data_mode();
+        start_read_mode();
+        read(response.data(), response.size());
+        end_read_mode();
+    }
+    end();
+}
+
+
 
 #if 0
 // Send a command a number of bytes the TFT controller
