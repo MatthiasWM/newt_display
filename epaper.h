@@ -1,5 +1,8 @@
 
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Matthias Melcher
 
+#if 0
 
 #ifndef _DISPLAY_EPD_W21_H_
 #define _DISPLAY_EPD_W21_H_
@@ -33,3 +36,4 @@ void PIC_display_Part_ALL(const unsigned char *bytes1, const unsigned char *byte
 ***********************************************************/
 
 
+#endif

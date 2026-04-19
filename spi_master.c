@@ -1,3 +1,9 @@
+
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Matthias Melcher
+
+#if 0
+
 // Copyright (c) 2021 Michael Stoops. All rights reserved.
 // Portions copyright (c) 2021 Raspberry Pi (Trading) Ltd.
 // 
@@ -89,3 +95,5 @@ int main() {
     }
 #endif
 }
+
+#endif

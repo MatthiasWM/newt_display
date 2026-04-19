@@ -1,7 +1,5 @@
-/**
- * Copyright (c) 2024 Matthias Melcher
- */
-
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Matthias Melcher
 
 /*
  This little toy program displays the content of an Apple Newton MessagePad 
@@ -40,6 +38,11 @@
 #include "hardware/structs/bus_ctrl.h"
 #include <stdio.h>
 
+#include "main.h"
+
+CaptureDevice lcd;
+SPI_3Pin spi;
+
 // ----------------------------------------------------------------------------
 // Initialize our little LED for control puposes
 const uint led_pin = PICO_DEFAULT_LED_PIN;
@@ -55,57 +58,6 @@ void led_toggle() {
     gpio_put(led_pin, led_state);
 }
 
-// ----------------------------------------------------------------------------
-// Define all pins for LCD input via flat ribbon cable
-const uint lcd_pin_vsync = 2;   // 75Hz
-const uint lcd_pin_hsync = 3;   // 24kHz
-const uint lcd_pin_pclk = 4;    // 1.5Mhz
-const uint lcd_pin_d0 = 6;      // 1.5MHz B&W pixel data
-const uint lcd_data_pins = 8;   // 8 data pins
-
-const uint lcd_line_bytes = 60; // 60 bytes times 8 gives us 480 pixels across
-const uint lcd_num_lines = 320; // we send 320 lines of image data
-// store the entire screen contents as LCD pixel data
-uint8_t lcd_line[lcd_num_lines][lcd_line_bytes];
-
-// Initialize the ports for reading LCD data. This should really be done
-// using a properly set DMA channel.
-void lcd_init() {
-    gpio_init(lcd_pin_vsync);
-    gpio_set_dir(lcd_pin_vsync, GPIO_IN);
-    gpio_init(lcd_pin_hsync);
-    gpio_set_dir(lcd_pin_hsync, GPIO_IN);
-    gpio_init(lcd_pin_pclk);
-    gpio_set_dir(lcd_pin_pclk, GPIO_IN);
-    for (int i=0; i<lcd_data_pins; i++) {
-        gpio_init(lcd_pin_d0 + i);
-        gpio_set_dir(lcd_pin_d0 + i, GPIO_IN);
-    }
-}
-
-// Wait for the rising edge of the vertical sync.
-void lcd_wait_vsync() {
-    // wait util vsync goes H which is the start of the vertical sync pulse
-    while (gpio_get(lcd_pin_vsync) == 1) { }
-    while (gpio_get(lcd_pin_vsync) == 0) { }
-}
-
-// Garb one line of pixel data from the LCD connector
-void lcd_scan_line(int y) {
-    // wait for the falling ege of the hsync signal
-    while (gpio_get(lcd_pin_hsync) == 0) { }
-    while (gpio_get(lcd_pin_hsync) == 1) { }
-    // prepare to read 80 bytes
-    uint8_t *dst = lcd_line[y];
-    for (int i=lcd_line_bytes; i>0; --i) {
-        // wait for the falling edge of the pixel clock
-        while (gpio_get(lcd_pin_pclk) == 0) { }
-        while (gpio_get(lcd_pin_pclk) == 1) { }
-        // read all PIO bits at once, shift them into position, 
-        // and write them to the buffer
-        *dst++ = (((*(uint32_t*)(SIO_BASE + 0x004)) >> lcd_pin_d0));
-    }
-}
 // ----------------------------------------------------------------------------
 // Define all pins for the TFT screen output via SPI
 const uint tft_pin_cs = 17;
@@ -323,11 +275,11 @@ uint16_t lcd_convert(uint8_t px) {
 
 // Conver the raw LCD data into 16bit RGB data for the TFT.
 // y is the source line buffer index.
-// Only a single target buffer is used. The image is trasfered line by line.
+// Only a single target buffer is used. The image is transfered line by line.
 void lcd_line_to_tft(int y) {
-    uint8_t *src = lcd_line[y];
+    const uint8_t *src = lcd.line(y);
     uint16_t *dst = tft_line;
-    for (int i=0; i<lcd_line_bytes; i++) {
+    for (int i=0; i<lcd.line_bytes(); i++) {
         uint8_t p1 = *src++;
         *dst++ = lcd_convert((p1>>4)&0x08);
         *dst++ = lcd_convert((p1>>3)&0x08);
@@ -344,20 +296,20 @@ void lcd_line_to_tft(int y) {
 int old_main() {
     stdio_init_all();
     led_init();
-    lcd_init();
+    lcd.init();
     tft_init();
 
     for (;;) {
         led_toggle();
 
         // wait for the start of the screen data
-        lcd_wait_vsync();
+        lcd.wait_vsync();
         // read all 320 lines and store them in RAM
-        for (int i=0; i<lcd_num_lines; i++) {
-            lcd_scan_line(i);
+        for (int i=0; i<lcd.num_lines(); i++) {
+            lcd.scan_line(i);
         }
         // convert the screen line by line and send the RGB data to the TFT
-        for (int i=0; i<lcd_num_lines; i++) {
+        for (int i=0; i<lcd.num_lines(); i++) {
             lcd_line_to_tft(i);
             tft_send_line(i, 1);
         }
@@ -371,40 +323,37 @@ int old_main() {
 void EPD_Init(void)
 {
     // reset the TFT controller
-    gpio_put(tft_pin_reset, 0);
-    sleep_ms(10);
-    gpio_put(tft_pin_reset, 1);
-    sleep_ms(10);
+    spi.pulse_reset();
 
-    tft_send_command(0x00);
-    tft_send_data(0x1F);
+    spi.send_command(0x00);
+    spi.send_data(0x1F);
   
-    tft_send_command(0x04); //POWER ON
+    spi.send_command(0x04); //POWER ON
     sleep_ms(300);  
-    tft_chkstatus();
-    tft_send_command(0X50);     //VCOM AND DATA INTERVAL SETTING
-    tft_send_data(0x21);
-    tft_send_data(0x07); 
+    spi.wait_ready();
+    spi.send_command(0X50);     //VCOM AND DATA INTERVAL SETTING
+    spi.send_data(0x21);
+    spi.send_data(0x07); 
 }
 
 //Deep sleep function
 void EPD_DeepSleep(void)
 {   
-    tft_send_command(0X50);  //VCOM AND DATA INTERVAL SETTING     
-    tft_send_data(0xf7); //WBmode:VBDF 17|D7 VBDW 97 VBDB 57    WBRmode:VBDF F7 VBDW 77 VBDB 37  VBDR B7  
+    spi.send_command(0X50);  //VCOM AND DATA INTERVAL SETTING     
+    spi.send_data(0xf7); //WBmode:VBDF 17|D7 VBDW 97 VBDB 57    WBRmode:VBDF F7 VBDW 77 VBDB 37  VBDR B7  
 
-    tft_send_command(0X02);   //power off
-    tft_chkstatus();          //waiting for the electronic paper IC to release the idle signal
+    spi.send_command(0X02);   //power off
+    spi.wait_ready();          //waiting for the electronic paper IC to release the idle signal
     sleep_ms(100);   //!!!The delay here is necessary, 200uS at least!!!       
-    tft_send_command(0X07);   //deep sleep
-    tft_send_data(0xA5);
+    spi.send_command(0X07);   //deep sleep
+    spi.send_data(0xA5);
 }
 
 void EPD_Update(void)
 {   
     //Refresh
-    tft_send_command(0x12);   //DISPLAY REFRESH   
-    tft_chkstatus();          //waiting for the electronic paper IC to release the idle signal
+    spi.send_command(0x12);   //DISPLAY REFRESH   
+    spi.wait_ready();          //waiting for the electronic paper IC to release the idle signal
 }
 
 
@@ -413,15 +362,15 @@ void EPD_WhiteScreen_White(void)
 {
     unsigned int i;
     //Write Data
-    tft_send_command(0x10);      
+    spi.send_command(0x10);      
     for(i=0;i<EPD_ARRAY;i++)       
     {
-        tft_send_data(0xff);  
+        spi.send_data(0xff);  
     }
-    tft_send_command(0x13);      
+    spi.send_command(0x13);      
     for(i=0;i<EPD_ARRAY;i++)       
     {
-        tft_send_data(0xff);  
+        spi.send_data(0xff);  
     }
     EPD_Update();   
 }
@@ -431,15 +380,15 @@ void EPD_WhiteScreen_Black(void)
 {
     unsigned int i;
     //Write Data
-    tft_send_command(0x10);      
+    spi.send_command(0x10);      
     for(i=0;i<EPD_ARRAY;i++)       
     {
-        tft_send_data(0xff);  
+        spi.send_data(0xff);  
     }
-    tft_send_command(0x13);      
+    spi.send_command(0x13);      
     for(i=0;i<EPD_ARRAY;i++)       
     {
-        tft_send_data(0x00);  
+        spi.send_data(0x00);  
     }
     EPD_Update();  
 }
@@ -448,13 +397,15 @@ void EPD_WhiteScreen_Black(void)
 int main() {
     stdio_init_all();
     led_init();
-    tft_init();
+    spi.init();
 
     EPD_Init(); //Full screen update initialization.
     //EPD_WhiteScreen_White(); //Clear screen function.
     EPD_WhiteScreen_Black(); //Clear screen function.
     EPD_DeepSleep(); //Enter the sleep mode and please do not delete it, otherwise it will reduce the lifespan of the screen.
-#if 0      
+
+    //spi.send(0x00, {0x1F, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00});
+    #if 0      
       delay(2000); //Delay for 2s. 
 		 /************Full display(3s)*******************/
 			EPD_Init(); //Full screen update initialization.
