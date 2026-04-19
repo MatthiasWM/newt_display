@@ -316,6 +316,11 @@ int old_main() {
     }
 }
 
+
+
+#if 0 // Lo Res Display
+
+
 #define EPD_WIDTH   648 
 #define EPD_HEIGHT  480
 #define EPD_ARRAY  EPD_WIDTH*EPD_HEIGHT/8  
@@ -414,6 +419,174 @@ void EPD_WhiteScreen_Black(void)
 
     EPD_Update();  
 }
+
+#else
+
+
+#define EPD_WIDTH   920 
+#define EPD_HEIGHT  680
+#define EPD_ARRAY  EPD_WIDTH*EPD_HEIGHT/8  
+#define Source_BITS     920
+#define Gate_BITS   680
+#define ALLSCREEN_BYTES   Source_BITS*Gate_BITS/8
+
+
+uint8_t Read_temp()
+{
+    // Returns temperature in degrees Celsius as read from the ePaper controller. 
+    // This is used to adjust the display update timing for better contrast.
+    std::vector<uint8_t> response (1);
+    spi.query(0x40, {}, response);
+    return response[0];
+}
+
+void Write_LUT_All(void)
+{
+	int tempvalue;
+	int temp;
+	temp = Read_temp();
+    printf("Temperature: %d\n", temp);
+    
+	if(temp <= 5)
+	{
+		tempvalue=232;  // -24
+	}
+	else if(temp <=10) 
+	{
+		tempvalue=235;   // -21
+	}
+	else if(temp <=20)
+	{
+		tempvalue=238;   // -18
+	}
+	else if(temp <=30)
+	{
+		 tempvalue=241;   // -15
+	}
+	else if(temp <=127)
+	{
+		tempvalue=244;    // -12
+	}
+	else
+	{
+		tempvalue=232;
+	}
+	
+    spi.send(0xe0, { 0x02 } );
+    spi.send(0xe6, { (uint8_t)tempvalue } );
+    spi.send(0xa5);      
+    spi.wait_ready();   // waiting for the electronic paper IC to release the idle signal
+    sleep_ms(10);       // At least 10ms delay	
+}
+
+void EPD_Init(void)
+{
+    spi.pulse_reset();
+    spi.wait_ready();
+
+    spi.send(0x00, { 0x27, 0x0e } ); // PSR: PWR_OFF_VCOM, PWR_OFF, BWR, PWR_OFF_SEQ
+	spi.wait_ready();          //waiting for the electronic paper IC to release the idle signal
+
+    spi.send(0x06, { 0x0f, 0x8b, 0x9c, 0xc1 } ); // BTST
+
+    spi.send(0xe7, { 0xc1 } ); // PST
+
+    spi.send(0x30, { 0x08 } ); // frame go with waveform
+
+    spi.send(0x50, { 0x77 } ); // CDI, border white
+
+    spi.send(0x61, { Source_BITS/256, Source_BITS%256, Gate_BITS/256, Gate_BITS%256 } ); // resolution
+
+    spi.send(0x62, { 0x98, 0x98, 0x98, 0x75, 0xca, 0xb2, 0x98, 0x7e } ); // HTOTAL
+
+    spi.send(0x65, { 0x00, 0x00, 0x00, 0x00 } ); // GSST
+
+    spi.send(0xe9, { 0x01 } ); // PST
+
+	Write_LUT_All();
+
+    // Power on
+    spi.send(0x04); 
+    spi.wait_ready();
+}
+
+//Deep sleep function
+void EPD_DeepSleep(void)
+{   
+    spi.send( 0x02, { 0x00 } );  	//power off
+	spi.wait_ready();          //waiting for the electronic paper IC to release the idle signal
+   
+	spi.send(0x07, { 0xA5 });  	//deep sleep
+	spi.wait_ready();          //waiting for the electronic paper IC to release the idle signal
+}
+
+void EPD_Update(void)
+{   
+    // Display refresh
+    spi.send(0x12, { 0x00 } );
+    spi.wait_ready(); // waiting for the electronic paper IC to release the idle signal
+}
+
+
+// Clear screen display
+void EPD_WhiteScreen_White(void)
+{
+    unsigned int i;
+
+    // Write Old Data
+    spi.start();
+    spi.write(0x10);
+    spi.data_mode();
+    for(i=0;i<EPD_ARRAY;i++)       
+    {
+        spi.write(0xff);  
+    }
+    spi.end();
+
+    // Write New Data
+    spi.start();
+    spi.write(0x13);
+    spi.data_mode();
+    for(i=0;i<EPD_ARRAY;i++)       
+    {
+        spi.write(0xff);  
+    }
+    spi.end();
+
+    EPD_Update();   
+}
+
+//Display all black
+void EPD_WhiteScreen_Black(void)
+{
+    unsigned int i;
+    // Write Old Data
+    spi.start();
+    spi.write(0x10);
+    spi.wait_ready();
+    spi.data_mode();
+    for(i=0;i<ALLSCREEN_BYTES*2;i++) // 2 bits per pixel?!
+    {
+        spi.write(0x00);  
+    }
+    spi.end();
+
+    // // Write New Data
+    // spi.start();
+    // spi.write(0x13);
+    // spi.data_mode();
+    // for(i=0;i<EPD_ARRAY;i++)       
+    // {
+    //     spi.write(0x00);  
+    // }
+    // spi.end();
+
+    EPD_Update();  
+}
+
+
+
+#endif
 
 
 int main() {

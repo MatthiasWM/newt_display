@@ -120,6 +120,7 @@ void SPI_3Pin::query(uint8_t cmd, const std::vector<uint8_t> data, std::vector<u
     if (!response.empty()) {
         data_mode();
         start_read_mode();
+        wait_ready();
         read(response.data(), response.size());
         end_read_mode();
     }
