@@ -11,4 +11,7 @@
 extern CaptureDevice lcd;
 extern SPI_3Pin spi;
 
+extern void led_init();
+extern void led_toggle();
+
 #endif // MAIN_H

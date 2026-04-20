@@ -10,6 +10,121 @@
  Partial display update is possible.
  */
 
+#if defined(DISPLAY_TYPE_GDEY058)
+
+#include "pico/stdlib.h"
+#include "hardware/spi.h"
+#include "hardware/gpio.h"
+#include "hardware/structs/bus_ctrl.h"
+#include <stdio.h>
+
+#include "main.h"
+
+
+#define EPD_WIDTH   648 
+#define EPD_HEIGHT  480
+#define EPD_ARRAY  EPD_WIDTH*EPD_HEIGHT/8  
+
+void EPD_Init(void)
+{
+    spi.init(20 * 1000 * 1000); // The SSD1677 ssems to be rated at 20MHz, likely works up to 40MHz.
+
+    // reset the TFT controller
+    spi.pulse_reset();
+
+    // Panel Setting: ~REG, KW/R, UD, SHL, SHD_N, RST_N
+    spi.send(0x00, { 0x1f } ); 
+  
+    // Power On
+    spi.send(0x04); 
+    sleep_ms(300);  
+    spi.wait_ready();
+
+    // VCOM and data interval setting
+    spi.send(0x50, { 0x21, 0x07 } ); // BDV:2, DOX:1, CDI:7
+}
+
+//Deep sleep function
+void EPD_DeepSleep(void)
+{   
+    // VCOM and data interval setting (??? documented differently in the datasheet)
+    spi.send(0x50, { 0xf7 } ); // WBmode:VBDF 17|D7 VBDW 97 VBDB 57    WBRmode:VBDF F7 VBDW 77 VBDB 37  VBDR B7  
+
+    // Power off
+    spi.send(0x02);   
+    spi.wait_ready();   // waiting for the electronic paper IC to release the idle signal
+    sleep_ms(100);      // !!! The delay here is necessary, 200uS at least!!!       
+
+    // Deep sleep
+    spi.send(0x07, { 0xa5 } );
+}
+
+void EPD_Update(void)
+{   
+    // Display refresh
+    spi.send(0x12);
+    spi.wait_ready(); // waiting for the electronic paper IC to release the idle signal
+}
+
+
+// Clear screen display
+void EPD_WhiteScreen_White(void)
+{
+    unsigned int i;
+
+    // Write Old Data
+    spi.start();
+    spi.write(0x10);
+    spi.data_mode();
+    for(i=0;i<EPD_ARRAY;i++)       
+    {
+        spi.write(0xff);  
+    }
+    spi.end();
+
+    // Write New Data
+    spi.start();
+    spi.write(0x13);
+    spi.data_mode();
+    for(i=0;i<EPD_ARRAY;i++)       
+    {
+        spi.write(0xff);  
+    }
+    spi.end();
+
+    EPD_Update();   
+}
+
+//Display all black
+void EPD_WhiteScreen_Black(void)
+{
+    unsigned int i;
+    // Write Old Data
+    spi.start();
+    spi.write(0x10);
+    spi.data_mode();
+    for(i=0;i<EPD_ARRAY;i++)       
+    {
+        spi.write(0xff);  
+    }
+    spi.end();
+
+    // Write New Data
+    spi.start();
+    spi.write(0x13);
+    spi.data_mode();
+    for(i=0;i<EPD_ARRAY;i++)       
+    {
+        spi.write(0x00);  
+    }
+    spi.end();
+
+    EPD_Update();  
+}
+
+
+
+
 #if 0
 
 
@@ -564,3 +679,5 @@ void Display_4Level_Gray(void)
 ***********************************************************/
 
 #endif
+
+#endif // DISPLAY_TYPE_GDEY058

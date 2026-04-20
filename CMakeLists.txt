@@ -36,8 +36,8 @@ pico_sdk_init()
 # Add executable. Default name is the project name, version 0.1
 
 # set(DISPLAY_TYPE "GDEH057" CACHE STRING "Display type")
-set(DISPLAY_TYPE "GDEY058" CACHE STRING "Display type")
-# set(DISPLAY_TYPE "LC7796S" CACHE STRING "Display type")
+# set(DISPLAY_TYPE "GDEY058" CACHE STRING "Display type")
+set(DISPLAY_TYPE "ST7796S" CACHE STRING "Display type")
 
 add_executable(spi_master
     epaper_gdeh057.cpp
@@ -48,15 +48,13 @@ add_executable(spi_master
     main.cpp
     spi_3pin.cpp
     spi_3pin.h
-    tft_lc7796s.cpp
+    tft_st7796s.cpp
     tft.h
-    newt_epaper.cpp
-    # spi_master.c
 )
 
 # Pull in basic dependencies
 target_link_libraries(spi_master pico_stdlib hardware_spi)
-target_compile_definitions(spi_master PRIVATE DISPLAY_TYPE=${DISPLAY_TYPE})
+target_compile_definitions(spi_master PRIVATE DISPLAY_TYPE_${DISPLAY_TYPE}=1)
 
 # create map/bin/hex file etc.
 pico_add_extra_outputs(spi_master)
