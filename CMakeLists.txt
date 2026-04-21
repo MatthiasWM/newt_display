@@ -46,6 +46,8 @@ add_executable(spi_master
     lcd_capture.cpp
     lcd_capture.h
     main.cpp
+    screen_buffer.cpp
+    screen_buffer.h
     spi_3pin.cpp
     spi_3pin.h
     tft_st7796s.cpp

@@ -26,10 +26,12 @@ ePaper TODO
   - [ ] partial refresh
   - [ ] 4 levels of gray
 - [ ] improve reading LCD data
+  - [ ] get reading LCD data to work again
+  - [ ] copy to TFT for easy verification
+  - [ ] find sequences for different gray values
   - [ ] use DMA to get pixel data into RAM
-  - [ ] analyse grayscale sequences
-  - [ ] accumulate frames to grayscale image
 - [ ] move LCD data to ePaper
+  - [ ] implement image store and copy LCD lines into gray scale
   - [ ] find changes in image and generate refresh rectangle
   - [ ] partial refresh of ePaper
   - [ ] simulate 16 grays with 4 pixels of 4 grays
@@ -37,6 +39,7 @@ ePaper TODO
   - [ ] find a good point for full refreshes
   - [ ] more timing optimiztion
 - [ ] get touch data back to Newton
+  - [ ] order resistive panel overlay
   - [ ] read touch data from display (no documentation yet!)
   - [ ] generate analog signal for Newton controller
   - [ ] align touch in and pen out
